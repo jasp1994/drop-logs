@@ -1,0 +1,186 @@
+---
+title: "Kerapac Simulator"
+output: html_document
+date: "2023-05-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+library(gganimate)
+library(ggeasy)
+library(scales)
+
+```
+
+
+```{r}
+
+#Empty tibble to store final kills data
+
+final_kills <-
+  tibble() %>% add_column(final_kills = NA, secondary_uniques = NA, staff_pieces = NA)
+
+#Roll random number between 1 and x
+roll <- function(end) {
+  random_number <- floor(runif(1, min = 1, max = end + 1))
+  return(random_number)
+  
+  
+#secondary drops
+raw_drop_table_1 <- read_csv('kerapac/kerapac_uniques.csv')
+
+#number of unique secondary drops
+dt1_drops <- nrow(raw_drop_table_1)
+  
+}
+
+```
+
+
+```{r Kerapac}
+
+for (i in 1:10000) {
+   
+  dt1 <- raw_drop_table_1
+  kills <- 0
+  staff_pieces<-0
+  secondary_uniques<-0
+  completed_log <- FALSE
+  has_pet <- FALSE
+  rolls_per_kill <- 1
+  
+  while (completed_log == FALSE | has_pet == FALSE | staff_pieces < 3) {
+    
+    threshold <- floor(kills / 500) + 1
+    pet_rate <- 1500 / threshold
+    
+    for(j in 1:rolls_per_kill){
+      pet_roll<-roll(pet_rate)
+      
+      if(pet_roll == 1){
+        has_pet<-TRUE
+      }
+      
+      staff_roll<-roll(450)
+      
+      if(staff_roll == 1){
+        staff_pieces<- staff_pieces + 1
+      }
+      
+      else {
+        
+        unique_roll<-roll(192)
+        if(unique_roll == 1){
+          secondary_uniques<- secondary_uniques + 1
+          
+      random_drop <- floor(runif(1, min = 1, max = dt1_drops + 1))
+      dt1[random_drop,]$has_item <- TRUE
+      dt1[random_drop,]$total_drops <- dt1[random_drop,]$total_drops + 1
+          
+        }
+        
+      }
+      
+    }
+    
+    kills <- kills + 1
+    completed_log <- all(dt1$has_item)
+    
+  }
+  
+    final_kills <- final_kills %>% add_row(final_kills = kills, staff_pieces = staff_pieces, secondary_uniques = secondary_uniques)
+}
+
+```
+
+```{r}
+
+staff_price<-1000000000/3
+kill_time<-2
+
+
+final_kills<-final_kills %>% 
+  mutate(total_drops = secondary_uniques + staff_pieces) %>% 
+  mutate(drop_rate = final_kills/total_drops) %>% 
+  mutate(staff_drop_rate = final_kills/staff_pieces) %>%
+  mutate(kill_time_mins = final_kills * kill_time) %>% 
+  mutate(total_log_hours = kill_time_mins/60) %>% 
+  mutate(staff_gp=staff_pieces*staff_price) %>% 
+  mutate(staff_gp_per_hour= staff_gp/total_log_hours/1000000)
+  
+
+```
+
+
+```{r Graphs}
+
+ggplot(final_kills, aes(x = final_kills)) +
+  geom_density(color="darkblue", fill="lightblue") +
+   geom_vline(
+    aes(xintercept = quantile(final_kills, c(.50))),
+    color = "green",
+    linetype="dashed",
+    size = 1
+  )+
+  theme_gray()
+
+ggplot(final_kills,aes(x=staff_gp_per_hour))+
+  geom_density(color="darkblue", fill="lightblue") +
+   geom_vline(
+    aes(xintercept = quantile(staff_gp_per_hour, c(.50))),
+    color = "green",
+    linetype="dashed",
+    size = 1
+  )+
+  theme_gray()
+  
+```
+
+```{r Quantiles}
+
+probs<-c(0.01,0.1,0.5,0.90,0.99)
+
+kills<-quantile(final_kills$final_kills,probs)
+quantile(final_kills$total_log_hours,probs)
+quantile(final_kills$staff_pieces,probs)
+quantile(final_kills$staff_gp_per_hour,probs)
+
+kills<-as_tibble(kills) %>% add_column(probs)
+
+p<-ggplot(kills %>% mutate(value = round(value,0)), aes(x=as.factor(percent(probs)),y=value,fill=as.factor(percent(probs))))+
+  geom_col()+
+  geom_label(aes(label=as.character(round(value,0))))+
+  labs(x="Percentile", y="Total Kills")+
+  scale_fill_manual(values = c("#2dc937","#99c140","#e7b416","#db7b2b","#cc3232"))+
+  easy_add_legend_title("Percentile")+
+  theme_classic()
+
+
+
+a<-p + transition_states(value, wrap = FALSE) +
+  shadow_mark() +
+  enter_grow()
+
+animate(a, fps=8, renderer = gifski_renderer(loop = FALSE))
+
+anim_save("animation.gif", animation = last_animation(), path = NULL)
+
+```
+
+
+```{r}
+
+#write_csv(final_kills, "kerapac/1_roll_final_data.csv")
+
+final_kills<-read_csv("1_roll_final_data.csv")
+
+final_kills<-read_csv("3_rolls_final_data.csv")
+
+```
+
+
